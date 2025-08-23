@@ -1,48 +1,338 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Web Sederhana Saya</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chat Offline Multi User + Translate</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 40px;
-      background: #f5f5f5;
-      color: #222;
-    }
-    .container {
-      background: #fff;
-      padding: 30px 25px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.07);
-      max-width: 500px;
-      margin: auto;
-    }
-    h1 {
-      color: #0070f3;
-      margin-bottom: 0.5em;
-    }
-    p {
-      margin-bottom: 1.4em;
-    }
-    .footer {
-      font-size: 0.95em;
-      color: #888;
-      text-align: center;
-      margin-top: 30px;
-    }
+    body{margin:0;font:16px/1.4 system-ui;background:#eef7ff;transition:background .3s,color .3s}
+    header{display:flex;gap:.5rem;align-items:center;padding:.5rem 1rem;background:#4caf50;color:#fff}
+    header .spacer{flex:1}
+    header select,header button,header input{border-radius:8px;padding:.3rem .5rem}
+    main{max-width:960px;margin:0 auto;padding:1rem;min-height:70vh}
+    #messages{display:flex;flex-direction:column;gap:.6rem;max-height:70vh;overflow-y:auto;}
+    .msg{border:1px solid #ddd;padding:.5rem .7rem;border-radius:8px;box-shadow:0 1px 4px #0001;position:relative}
+    .msg .meta{font-weight:bold;margin-bottom:.2rem;display:flex;justify-content:space-between;align-items:center}
+    .msg .orig{opacity:.6;font-style:italic;margin-top:.2rem}
+    .msg button.del{border:0;background:none;color:#999;cursor:pointer;font-size:.9rem}
+    .msg.User\ A{background:#e3f2fd}
+    .msg.User\ B{background:#fce4ec}
+    .msg.User\ C{background:#f1f8e9}
+    .composer{display:flex;gap:.5rem;padding:.5rem 1rem;background:#f9f9f9;position:sticky;bottom:0;border-top:1px solid #ddd}
+    .composer input{flex:1;padding:.5rem;border-radius:8px;border:1px solid #ccc}
+    .composer button{background:#4caf50;color:#fff;border:0;padding:.5rem 1rem;border-radius:8px;cursor:pointer}
+    details.toolbox{max-width:960px;margin:1rem auto;background:#fff;border-radius:8px;padding:.6rem .9rem;border:1px solid #ddd}
+    details.toolbox summary{cursor:pointer;font-weight:700}
+    textarea{width:100%;min-height:100px}
+
+    /* dark mode */
+    body.dark{background:#121212;color:#eee}
+    body.dark header{background:#333;color:#eee}
+    body.dark .composer{background:#1e1e1e}
+    body.dark .msg{background:#222;color:#eee;border-color:#444}
+    body.dark details.toolbox{background:#222;border-color:#444}
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Halo, Selamat Datang!</h1>
-    <p>Ini adalah contoh web sederhana yang dibuat dengan HTML dan CSS.<br>
-    Kamu bisa mengubah isi dan tampilannya sesuai keinginanmu.</p>
-    <p><strong>Tips:</strong> Edit file <code>index.html</code> di repo GitHub kamu, lalu lihat hasilnya di GitHub Pages!</p>
+  <header>
+    <b>💬 Chat Offline</b>
+    <label>User:
+      <select id="userSelect">
+        <option>User A</option>
+        <option>User B</option>
+        <option>User C</option>
+      </select>
+    </label>
+    <div class="spacer"></div>
+    <label>Translate:
+      <select id="translateMode">
+        <option value="none">None</option>
+        <option value="auto" selected>Auto (EN↔ID)</option>
+        <option value="en2id">EN→ID</option>
+        <option value="id2en">ID→EN</option>
+      </select>
+    </label>
+    <button id="clearBtn">Clear</button>
+    <button id="exportBtn">Export</button>
+    <input id="importFile" type="file" accept="application/json" />
+    <button id="darkBtn">🌙</button>
+  </header>
+
+  <main><div id="messages"></div></main>
+
+  <div class="composer">
+    <input id="msgInput" type="text" placeholder="Tulis pesan…" />
+    <button id="sendBtn">Kirim</button>
   </div>
-  <div class="footer">
-    &copy; 2025 &bull; Dibuat oleh <a href="https://github.com/bambangprogresscasamora-creator" target="_blank">bambangprogresscasamora-creator</a>
-  </div>
+
+  <details class="toolbox">
+    <summary>🧰 Kamus Offline</summary>
+    <p>Tambah entri baru:</p>
+    <input id="newEn" placeholder="English" /> 
+    <input id="newId" placeholder="Indonesia" /> 
+    <button id="addPairBtn">Tambah</button>
+    <p>Kamus saat ini:</p>
+    <textarea id="dictView" readonly></textarea>
+  </details>
+
+<script>
+  // ===== Kamus dasar =====
+const basePairs = [
+    ["good morning","selamat pagi"],["good afternoon","selamat siang"],["good evening","selamat sore"],["good night","selamat malam"],
+    ["hello","halo"],["hi","hai"],["how are you","apa kabar"],["i am fine","saya baik-baik saja"],["thank you","terima kasih"],["thanks","makasih"],
+    ["you are welcome","sama-sama"],["please","tolong"],["sorry","maaf"],["excuse me","permisi"],["see you","sampai jumpa"],["goodbye","selamat tinggal"],
+    ["take care","hati-hati"],["what is your name","siapa namamu"],["my name is","nama saya"],["nice to meet you","senang bertemu denganmu"],
+    ["i am happy","saya senang"],["i am sad","saya sedih"],["i am hungry","saya lapar"],["i am thirsty","saya haus"],["i am tired","saya capek"],
+    ["i love you","aku cinta kamu"],["i miss you","aku merindukanmu"],["good job","kerja bagus"],["well done","bagus sekali"],
+    ["have a nice day","semoga harimu menyenangkan"],
+	
+  // ===== Angka =====
+  ["zero","nol"],["one","satu"],["two","dua"],["three","tiga"],["four","empat"],["five","lima"],["six","enam"],["seven","tujuh"],["eight","delapan"],["nine","sembilan"],["ten","sepuluh"],["eleven","sebelas"],["twelve","dua belas"],["thirteen","tiga belas"],["fourteen","empat belas"],["fifteen","lima belas"],["sixteen","enam belas"],["seventeen","tujuh belas"],["eighteen","delapan belas"],["nineteen","sembilan belas"],["twenty","dua puluh"],["thirty","tiga puluh"],["forty","empat puluh"],["fifty","lima puluh"],["sixty","enam puluh"],["seventy","tujuh puluh"],["eighty","delapan puluh"],["ninety","sembilan puluh"],["hundred","seratus"],["thousand","seribu"],
+
+  // ===== Warna =====
+  ["red","merah"],["blue","biru"],["green","hijau"],["yellow","kuning"],["black","hitam"],["white","putih"],["gray","abu-abu"],["orange","oranye"],["purple","ungu"],["pink","merah muda"],["brown","cokelat"],["gold","emas"],["silver","perak"],["light blue","biru muda"],["dark blue","biru tua"],["light green","hijau muda"],["dark green","hijau tua"],["beige","krem"],["turquoise","pirus"],["violet","lembayung"],
+
+  // ===== Hari =====
+  ["monday","senin"],["tuesday","selasa"],["wednesday","rabu"],["thursday","kamis"],["friday","jumat"],["saturday","sabtu"],["sunday","minggu"],["day","hari"],["week","minggu"],["weekend","akhir pekan"],
+
+  // ===== Bulan =====
+  ["january","januari"],["february","februari"],["march","maret"],["april","april"],["may","mei"],["june","juni"],["july","juli"],["august","agustus"],["september","september"],["october","oktober"],["november","november"],["december","desember"],["month","bulan"],["year","tahun"],["season","musim"],["spring","musim semi"],["summer","musim panas"],["autumn","musim gugur"],["fall","musim gugur"],["winter","musim dingin"],
+
+  // ===== Hewan =====
+  ["cat","kucing"],["dog","anjing"],["bird","burung"],["chicken","ayam"],["cow","sapi"],["goat","kambing"],["sheep","domba"],["horse","kuda"],["buffalo","kerbau"],["fish","ikan"],["duck","bebek"],["goose","angsa"],["pig","babi"],["tiger","harimau"],["lion","singa"],["elephant","gajah"],["monkey","monyet"],["rabbit","kelinci"],["mouse","tikus"],["rat","tikus besar"],["snake","ular"],["crocodile","buaya"],["shark","hiu"],["whale","paus"],["dolphin","lumba-lumba"],["frog","katak"],["turtle","kura-kura"],["butterfly","kupu-kupu"],["bee","lebah"],["ant","semut"],["spider","laba-laba"],["dragonfly","capung"],["snail","siput"],["bat","kelelawar"],["eagle","elang"],["owl","burung hantu"],["peacock","merak"],["parrot","burung beo"],["swan","angsa putih"],["camel","unta"],["panda","panda"],["koala","koala"],["kangaroo","kanguru"],["giraffe","jerapah"],["zebra","zebra"],["bear","beruang"],["wolf","serigala"],["fox","rubah"],["deer","rusa"],
+
+  // ===== Makanan =====
+  ["rice","nasi"],["bread","roti"],["egg","telur"],["chicken meat","daging ayam"],["beef","daging sapi"],["pork","daging babi"],["fish meat","daging ikan"],["tofu","tahu"],["tempeh","tempe"],["noodles","mi"],["soup","sup"],["porridge","bubur"],["satay","sate"],["fried rice","nasi goreng"],["fried noodles","mi goreng"],["meatball","bakso"],["rendang","rendang"],["salad","salad"],["vegetables","sayur"],["spinach","bayam"],["carrot","wortel"],["potato","kentang"],["corn","jagung"],["onion","bawang"],["garlic","bawang putih"],["chili","cabai"],["pepper","lada"],["salt","garam"],["sugar","gula"],["butter","mentega"],["cheese","keju"],["milk","susu"],["yogurt","yogurt"],["honey","madu"],["apple","apel"],["banana","pisang"],["mango","mangga"],["orange fruit","jeruk"],["grape","anggur"],["papaya","pepaya"],["pineapple","nanas"],["watermelon","semangka"],["melon","melon"],["strawberry","stroberi"],["avocado","alpukat"],["guava","jambu"],["durian","durian"],["coconut","kelapa"],["jackfruit","nangka"],["snack","camilan"],["cake","kue"],["cookie","kue kering"],["chocolate","cokelat"],["ice cream","es krim"],["candy","permen"],["chips","keripik"],["cracker","kerupuk"],["peanut","kacang"],["cashew","kacang mete"],["almond","almond"],["eggplant","terong"],["cabbage","kubis"],["broccoli","brokoli"],["lettuce","selada"],["mushroom","jamur"],["ginger","jahe"],["turmeric","kunyit"],["lemongrass","serai"]
+,
+
+  // ===== Minuman =====
+  ["water","air"],["tea","teh"],["coffee","kopi"],["milk","susu"],["juice","jus"],["soda","soda"],["wine","anggur"],["beer","bir"],["cocktail","koktail"],["smoothie","smoothie"],["coconut water","air kelapa"],["lemonade","limun"],["hot chocolate","cokelat panas"],["green tea","teh hijau"],["black tea","teh hitam"],["herbal tea","teh herbal"],["sparkling water","air berkarbonasi"],["energy drink","minuman energi"],["milkshake","milkshake"],["yogurt drink","minuman yogurt"],
+
+  // ===== Benda Rumah =====
+  ["table","meja"],["chair","kursi"],["bed","tempat tidur"],["sofa","sofa"],["cupboard","lemari"],["drawer","laci"],["shelf","rak"],["lamp","lampu"],["fan","kipas angin"],["air conditioner","AC"],["heater","pemanas"],["mirror","cermin"],["clock","jam"],["door","pintu"],["window","jendela"],["curtain","tirai"],["carpet","karpet"],["mat","keset"],["broom","sapu"],["mop","pel"],["bucket","ember"],["pan","wajan"],["pot","panci"],["knife","pisau"],["fork","garpu"],["spoon","sendok"],["plate","piring"],["glass","gelas"],["cup","cangkir"],["bowl","mangkuk"],["soap","sabun"],["shampoo","sampo"],["toothbrush","sikat gigi"],["toothpaste","pasta gigi"],["towel","handuk"],["blanket","selimut"],["pillow","bantal"],["sheet","seprai"],["fan","kipas"],["stove","kompor"],["refrigerator","kulkas"],["microwave","microwave"],["oven","oven"],["washing machine","mesin cuci"],["vacuum","vacuum cleaner"],["trash bin","tempat sampah"],["clock","jam dinding"],
+
+  // ===== Pekerjaan =====
+  ["teacher","guru"],["student","murid"],["doctor","dokter"],["nurse","perawat"],["engineer","insinyur"],["farmer","petani"],["driver","sopir"],["police","polisi"],["soldier","tentara"],["chef","koki"],["waiter","pelayan"],["cleaner","pembersih"],["mechanic","montir"],["carpenter","tukang kayu"],["builder","tukang bangunan"],["painter","pelukis"],["singer","penyanyi"],["actor","aktor"],["actress","aktris"],["writer","penulis"],["journalist","wartawan"],["photographer","fotografer"],["pilot","pilot"],["sailor","pelaut"],["fisherman","nelayan"],["merchant","pedagang"],["tailor","penjahit"],["barber","tukang cukur"],["priest","pendeta"],["imam","imam"],["monk","biksu"],["manager","manajer"],["officer","pejabat"],["scientist","ilmuwan"],["programmer","programer"],["designer","desainer"],["architect","arsitek"],["lawyer","pengacara"],["judge","hakim"],["firefighter","pemadam kebakaran"],
+
+  // ===== Kata Kerja =====
+  ["eat","makan"],["drink","minum"],["sleep","tidur"],["wake up","bangun"],["sit","duduk"],["stand","berdiri"],["walk","berjalan"],["run","berlari"],["jump","melompat"],["play","bermain"],["read","membaca"],["write","menulis"],["draw","menggambar"],["speak","berbicara"],["listen","mendengarkan"],["hear","mendengar"],["see","melihat"],["look","melihat"],["watch","menonton"],["think","berpikir"],["know","tahu"],["understand","mengerti"],["remember","ingat"],["forget","lupa"],["learn","belajar"],["teach","mengajar"],["work","bekerja"],["study","belajar"],["open","membuka"],["close","menutup"],["start","mulai"],["finish","selesai"],["buy","membeli"],["sell","menjual"],["pay","membayar"],["help","membantu"],["call","memanggil"],["wait","menunggu"],["hope","berharap"],["need","butuh"],["want","ingin"],["love","mencintai"],["like","suka"],["hate","benci"],["smile","tersenyum"],["cry","menangis"],["laugh","tertawa"],["win","menang"],["lose","kalah"],["work out","berolahraga"],
+
+  // ===== Emosi =====
+  ["happy","bahagia"],["sad","sedih"],["angry","marah"],["afraid","takut"],["surprised","terkejut"],["confused","bingung"],["tired","lelah"],["excited","bersemangat"],["proud","bangga"],["ashamed","malu"],["lonely","kesepian"],["bored","bosan"],["worried","khawatir"],["jealous","cemburu"],["calm","tenang"],["brave","berani"],["kind","baik hati"],["friendly","ramah"],["lazy","malas"],["honest","jujur"]
+,
+
+  // ===== Alam =====
+  ["sun","matahari"],["moon","bulan"],["star","bintang"],["sky","langit"],["cloud","awan"],["rain","hujan"],["storm","badai"],["thunder","guntur"],["lightning","petir"],["wind","angin"],["snow","salju"],["ice","es"],["fire","api"],["earth","bumi"],["soil","tanah"],["rock","batu"],["sand","pasir"],["mountain","gunung"],["hill","bukit"],["valley","lembah"],["river","sungai"],["lake","danau"],["sea","laut"],["ocean","samudra"],["beach","pantai"],["island","pulau"],["forest","hutan"],["tree","pohon"],["leaf","daun"],["flower","bunga"],["grass","rumput"],["plant","tanaman"],["root","akar"],["branch","cabang"],["fruit","buah"],["volcano","gunung berapi"],["earthquake","gempa bumi"],["flood","banjir"],["tsunami","tsunami"],["drought","kemarau"],
+
+  // ===== Bagian Tubuh =====
+  ["head","kepala"],["hair","rambut"],["eye","mata"],["ear","telinga"],["nose","hidung"],["mouth","mulut"],["tooth","gigi"],["tongue","lidah"],["lip","bibir"],["cheek","pipi"],["chin","dagu"],["neck","leher"],["shoulder","bahu"],["arm","lengan"],["hand","tangan"],["finger","jari"],["thumb","ibu jari"],["nail","kuku"],["chest","dada"],["back","punggung"],["stomach","perut"],["waist","pinggang"],["hip","pinggul"],["leg","kaki"],["thigh","paha"],["knee","lutut"],["ankle","pergelangan kaki"],["foot","kaki"],["toe","jari kaki"],["skin","kulit"],["bone","tulang"],["muscle","otot"],["heart","jantung"],["lung","paru-paru"],["blood","darah"],
+
+  // ===== Sekolah =====
+  ["school","sekolah"],["teacher","guru"],["student","murid"],["class","kelas"],["lesson","pelajaran"],["subject","mata pelajaran"],["mathematics","matematika"],["science","ilmu pengetahuan"],["history","sejarah"],["geography","geografi"],["language","bahasa"],["english","bahasa inggris"],["indonesian","bahasa indonesia"],["book","buku"],["notebook","buku tulis"],["pen","pena"],["pencil","pensil"],["eraser","penghapus"],["ruler","penggaris"],["blackboard","papan tulis"],["chalk","kapur"],["marker","spidol"],["desk","meja belajar"],["chair","kursi"],["bag","tas"],["exam","ujian"],["homework","pekerjaan rumah"],["question","pertanyaan"],["answer","jawaban"],["score","nilai"],
+
+  // ===== Teknologi =====
+  ["computer","komputer"],["laptop","laptop"],["phone","telepon"],["mobile phone","ponsel"],["smartphone","ponsel pintar"],["tablet","tablet"],["keyboard","keyboard"],["mouse","mouse"],["screen","layar"],["printer","printer"],["scanner","pemindai"],["camera","kamera"],["television","televisi"],["remote","remote"],["radio","radio"],["internet","internet"],["website","situs web"],["email","email"],["message","pesan"],["call","panggilan"],["battery","baterai"],["charger","pengisi daya"],["file","berkas"],["folder","map"],["program","program"],["software","perangkat lunak"],["hardware","perangkat keras"],["application","aplikasi"],["game","permainan"],["password","kata sandi"],
+
+  // ===== Konsep Abstrak =====
+  ["time","waktu"],["day","hari"],["night","malam"],["morning","pagi"],["afternoon","siang"],["evening","sore"],["moment","momen"],["year","tahun"],["month","bulan"],["week","minggu"],["hour","jam"],["minute","menit"],["second","detik"],["today","hari ini"],["tomorrow","besok"],["yesterday","kemarin"],["future","masa depan"],["past","masa lalu"],["present","sekarang"],["age","usia"],["life","kehidupan"],["death","kematian"],["love","cinta"],["peace","damai"],["war","perang"],["freedom","kebebasan"],["truth","kebenaran"],["lie","kebohongan"],["justice","keadilan"],["power","kekuasaan"],["money","uang"],["price","harga"],["rich","kaya"],["poor","miskin"],["expensive","mahal"],["cheap","murah"],["light","cahaya"],["dark","gelap"],["hot","panas"],["cold","dingin"],["strong","kuat"],["weak","lemah"],["clean","bersih"],["dirty","kotor"],["beautiful","cantik"],["handsome","tampan"],["big","besar"],["small","kecil"],["long","panjang"],["short","pendek"],["fast","cepat"],["slow","lambat"],["easy","mudah"],["difficult","sulit"],["important","penting"],["possible","mungkin"],["impossible","tidak mungkin"],["true","benar"],["false","salah"],["different","berbeda"]
+,
+
+  // ===== Hobi =====
+  ["reading","membaca"],["writing","menulis"],["drawing","menggambar"],["painting","melukis"],["singing","bernyanyi"],["dancing","menari"],["playing music","bermain musik"],["gardening","berkebun"],["fishing","memancing"],["hiking","mendaki"],["camping","berkemah"],["traveling","bepergian"],["cooking","memasak"],["baking","membuat kue"],["photography","fotografi"],["watching movies","menonton film"],["listening music","mendengarkan musik"],["collecting stamps","mengoleksi perangko"],["collecting coins","mengoleksi koin"],["playing games","bermain game"],
+
+  // ===== Olahraga =====
+  ["football","sepak bola"],["basketball","bola basket"],["volleyball","bola voli"],["badminton","bulu tangkis"],["tennis","tenis"],["table tennis","tenis meja"],["swimming","berenang"],["running","lari"],["cycling","bersepeda"],["boxing","tinju"],["karate","karate"],["judo","judo"],["taekwondo","taekwondo"],["yoga","yoga"],["gymnastics","senam"],["golf","golf"],["rugby","rugbi"],["baseball","bisbol"],["cricket","kriket"],["hockey","hoki"],["surfing","selancar"],["skating","bermain skate"],["skiing","berski"],["climbing","memanjat"],["martial arts","bela diri"],
+
+  // ===== Transportasi Lanjut =====
+  ["metro","kereta bawah tanah"],["tram","trem"],["ferry","kapal feri"],["canoe","kanu"],["kayak","kayak"],["rocket","roket"],["spaceship","pesawat luar angkasa"],["satellite","satelit"],["hovercraft","hovercraft"],["scooter","skuter"],["skateboard","papan seluncur"],["roller skates","sepatu roda"],["carriage","kereta kuda"],["ambulance","ambulans"],["police car","mobil polisi"],["fire truck","mobil pemadam"],["delivery truck","mobil pengantar"],["garbage truck","truk sampah"],["tank","tank"],["jeep","jeep"],
+
+  // ===== Emosi & Kepribadian Lanjut =====
+  ["curious","penasaran"],["grateful","bersyukur"],["hopeful","penuh harapan"],["helpless","tak berdaya"],["confident","percaya diri"],["insecure","tidak percaya diri"],["shy","pemalu"],["outgoing","periang"],["optimistic","optimis"],["pessimistic","pesimis"],["generous","dermawan"],["selfish","egois"],["patient","sabar"],["impatient","tidak sabar"],["forgiving","pemaaf"],["strict","keras"],["funny","lucu"],["serious","serius"],["creative","kreatif"],["lazy","pemalas"],
+
+  // ===== Misc (Campuran) =====
+  ["city","kota"],["village","desa"],["country","negara"],["capital","ibu kota"],["government","pemerintah"],["president","presiden"],["king","raja"],["queen","ratu"],["prince","pangeran"],["princess","putri"],["flag","bendera"],["anthem","lagu kebangsaan"],["border","perbatasan"],["map","peta"],["globe","bola dunia"],["religion","agama"],["temple","kuil"],["church","gereja"],["mosque","masjid"],["synagogue","sinagoga"],["holiday","hari libur"],["festival","festival"],["ceremony","upacara"],["tradition","tradisi"],["culture","budaya"],["language","bahasa"],["dialect","dialek"],["translation","terjemahan"],["dictionary","kamus"],["story","cerita"],["poem","puisi"],["song","lagu"],["music","musik"],["art","seni"],["craft","kerajinan"],["market","pasar"],["shop","toko"],["store","toserba"],["mall","mal"],["supermarket","supermarket"],["restaurant","restoran"],["cafe","kafe"],["hotel","hotel"],["bank","bank"],["hospital","rumah sakit"],["clinic","klinik"],["pharmacy","apotek"],["factory","pabrik"],["office","kantor"],["company","perusahaan"],["job","pekerjaan"],["career","karier"],["future plan","rencana masa depan"],["dream","mimpi"],["goal","tujuan"]
+,
+
+  // ===== Teknologi Lanjut =====
+  ["artificial intelligence","kecerdasan buatan"],["machine learning","pembelajaran mesin"],["robot","robot"],["drone","drone"],["3D printer","printer 3D"],["virtual reality","realitas virtual"],["augmented reality","realitas tertambah"],["blockchain","blockchain"],["cryptocurrency","mata uang kripto"],["bitcoin","bitcoin"],["ethereum","ethereum"],["network","jaringan"],["server","server"],["database","basis data"],["cloud","awan"],["software engineer","insinyur perangkat lunak"],["hardware engineer","insinyur perangkat keras"],["cybersecurity","keamanan siber"],["hacker","peretas"],["programming","pemrograman"],
+
+  // ===== Sekolah Lanjut =====
+  ["principal","kepala sekolah"],["counselor","konselor"],["librarian","pustakawan"],["laboratory","laboratorium"],["experiment","percobaan"],["project","proyek"],["assignment","tugas"],["exam","ujian"],["report","laporan"],["presentation","presentasi"],["lecture","kuliah"],["discussion","diskusi"],["debate","debat"],["classmate","teman sekelas"],["friend","teman"],["teacher assistant","asisten guru"],["grade","nilai"],["scholarship","beasiswa"],["study abroad","belajar di luar negeri"],["research","penelitian"],
+
+  // ===== Tubuh Lanjut =====
+  ["brain","otak"],["spine","tulang belakang"],["nerve","saraf"],["vein","vena"],["artery","arteri"],["lungs","paru-paru"],["kidney","ginjal"],["liver","hati"],["stomach","perut"],["intestine","usus"],["pancreas","pankreas"],["spleen","limpa"],["bladder","kantung kemih"],["muscle","otot"],["bone","tulang"],["skin","kulit"],["hair","rambut"],["eye","mata"],["ear","telinga"],["mouth","mulut"],
+
+  // ===== Lain-lain =====
+  ["weather","cuaca"],["temperature","suhu"],["climate","iklim"],["environment","lingkungan"],["pollution","polusi"],["recycle","mendaur ulang"],["energy","energi"],["power","tenaga"],["electricity","listrik"],["fuel","bahan bakar"],["vehicle","kendaraan"],["transportation","transportasi"],["road","jalan"],["bridge","jembatan"],["tunnel","terowongan"],["mountain","gunung"],["river","sungai"],["lake","danau"],["forest","hutan"],["desert","gurun"],["ocean","samudra"],["sea","laut"],["island","pulau"],["beach","pantai"],["city","kota"],["village","desa"],["country","negara"],["continent","benua"],["planet","planet"],["star","bintang"],["galaxy","galaksi"],["universe","alam semesta"],["history","sejarah"],["culture","budaya"],["tradition","tradisi"],["festival","festival"],["holiday","hari libur"],["celebration","perayaan"],["food","makanan"],["drink","minuman"],["clothing","pakaian"],["fashion","mode"],["music","musik"],["art","seni"],["sport","olahraga"],["game","permainan"],["toy","mainan"],["friend","teman"],["family","keluarga"],["community","komunitas"],["society","masyarakat"],["government","pemerintah"],["law","hukum"],["justice","keadilan"],["freedom","kebebasan"],["peace","damai"],["war","perang"],["education","pendidikan"],["science","sains"],["technology","teknologi"],["medicine","kedokteran"],["health","kesehatan"],["travel","bepergian"],["nature","alam"],["animal","hewan"],["plant","tanaman"],["tree","pohon"],["flower","bunga"],["fruit","buah"],["vegetable","sayur"],["house","rumah"],["apartment","apartemen"],["building","bangunan"],["road","jalan"],["vehicle","kendaraan"],["transport","transportasi"],["phone","telepon"],["computer","komputer"],["internet","internet"],["email","email"],["message","pesan"],["call","panggilan"],["music","musik"],["movie","film"],["book","buku"],["story","cerita"],["poem","puisi"],["language","bahasa"],["word","kata"],["sentence","kalimat"],["question","pertanyaan"],["answer","jawaban"],["idea","ide"],["thought","pikiran"],["dream","mimpi"],["hope","harapan"],["love","cinta"],["friendship","persahabatan"],["family","keluarga"],["life","kehidupan"],["death","kematian"],["happiness","kebahagiaan"],["sadness","kesedihan"],["anger","amarah"],["fear","ketakutan"],["surprise","kejutan"],["joy","kegembiraan"],["fun","kesenangan"],["work","pekerjaan"],["play","bermain"],["study","belajar"],["travel","bepergian"]
+
+,
+  // ===== Alam Lanjut =====
+  ["river","sungai"],["mountain","gunung"],["hill","bukit"],["forest","hutan"],["desert","gurun"],["ocean","samudra"],["lake","danau"],["island","pulau"],["volcano","gunung berapi"],["waterfall","air terjun"],["cave","gua"],["beach","pantai"],["cliff","tebing"],["valley","lembah"],["swamp","rawa"],["glacier","gletser"],["pond","kolam"],["reef","karang"],["canyon","ngarai"],["meadow","padang rumput"],
+
+  // ===== Makanan Lanjut =====
+  ["bread","roti"],["rice","nasi"],["noodle","mi"],["pasta","pasta"],["cake","kue"],["cookie","kue kering"],["cheese","keju"],["milk","susu"],["egg","telur"],["chicken","ayam"],["beef","daging sapi"],["pork","daging babi"],["fish","ikan"],["shrimp","udang"],["crab","kepiting"],["vegetable","sayur"],["fruit","buah"],["apple","apel"],["banana","pisang"],["orange","jeruk"],["tomato","tomat"],["potato","kentang"],["onion","bawang"],["garlic","bawang putih"],["pepper","lada"],["salt","garam"],["sugar","gula"],["honey","madu"],["butter","mentega"],["oil","minyak"],["soup","sup"],["sandwich","roti lapis"],["pizza","pizza"],["burger","burger"],["hotdog","hotdog"],["ice cream","es krim"],["chocolate","cokelat"],["coffee","kopi"],["tea","teh"],["juice","jus"],
+
+  // ===== Aktivitas =====
+  ["reading","membaca"],["writing","menulis"],["drawing","menggambar"],["painting","melukis"],["singing","bernyanyi"],["dancing","menari"],["cooking","memasak"],["baking","membuat kue"],["fishing","memancing"],["hiking","mendaki"],["camping","berkemah"],["swimming","berenang"],["running","lari"],["cycling","bersepeda"],["yoga","yoga"],["meditation","meditasi"],["shopping","berbelanja"],["traveling","bepergian"],["playing","bermain"],["watching movies","menonton film"],
+
+  // ===== Teknologi Lanjut =====
+  ["computer","komputer"],["laptop","laptop"],["smartphone","ponsel pintar"],["tablet","tablet"],["internet","internet"],["wifi","wifi"],["router","router"],["server","server"],["cloud","awan"],["database","basis data"],["email","email"],["software","perangkat lunak"],["hardware","perangkat keras"],["programming","pemrograman"],["robot","robot"],["drone","drone"],["AI","kecerdasan buatan"],["VR","realitas virtual"],["AR","realitas tertambah"],["blockchain","blockchain"],
+
+  // ===== Emosi & Sifat Lanjut =====
+  ["happy","bahagia"],["sad","sedih"],["angry","marah"],["afraid","takut"],["surprised","terkejut"],["confused","bingung"],["excited","bersemangat"],["bored","bosan"],["tired","lelah"],["relaxed","santai"],["curious","penasaran"],["proud","bangga"],["jealous","cemburu"],["kind","baik hati"],["friendly","ramah"],["lazy","malas"],["honest","jujur"],["generous","dermawan"],["selfish","egois"],["brave","berani"]
+
+,
+["river","sungai"],["mountain","gunung"],["hill","bukit"],["forest","hutan"],["desert","gurun"],["ocean","samudra"],["lake","danau"],["island","pulau"],["volcano","gunung berapi"],["waterfall","air terjun"],["cave","gua"],["beach","pantai"],["cliff","tebing"],["valley","lembah"],["swamp","rawa"],["glacier","gletser"],["pond","kolam"],["reef","karang"],["canyon","ngarai"],["meadow","padang rumput"],
+["bread","roti"],["rice","nasi"],["noodle","mi"],["pasta","pasta"],["cake","kue"],["cookie","kue kering"],["cheese","keju"],["milk","susu"],["egg","telur"],["chicken","ayam"],["beef","daging sapi"],["pork","daging babi"],["fish","ikan"],["shrimp","udang"],["crab","kepiting"],["vegetable","sayur"],["fruit","buah"],["apple","apel"],["banana","pisang"],["orange","jeruk"],["tomato","tomat"],["potato","kentang"],["onion","bawang"],["garlic","bawang putih"],["pepper","lada"],["salt","garam"],["sugar","gula"],["honey","madu"],["butter","mentega"],["oil","minyak"],["soup","sup"],["sandwich","roti lapis"],["pizza","pizza"],["burger","burger"],["hotdog","hotdog"],["ice cream","es krim"],["chocolate","cokelat"],["coffee","kopi"],["tea","teh"],["juice","jus"],
+["reading","membaca"],["writing","menulis"],["drawing","menggambar"],["painting","melukis"],["singing","bernyanyi"],["dancing","menari"],["cooking","memasak"],["baking","membuat kue"],["fishing","memancing"],["hiking","mendaki"],["camping","berkemah"],["swimming","berenang"],["running","lari"],["cycling","bersepeda"],["yoga","yoga"],["meditation","meditasi"],["shopping","berbelanja"],["traveling","bepergian"],["playing","bermain"],["watching movies","menonton film"],
+["computer","komputer"],["laptop","laptop"],["smartphone","ponsel pintar"],["tablet","tablet"],["internet","internet"],["wifi","wifi"],["router","router"],["server","server"],["cloud","awan"],["database","basis data"],["email","email"],["software","perangkat lunak"],["hardware","perangkat keras"],["programming","pemrograman"],["robot","robot"],["drone","drone"],["AI","kecerdasan buatan"],["VR","realitas virtual"],["AR","realitas tertambah"],["blockchain","blockchain"],
+["happy","bahagia"],["sad","sedih"],["angry","marah"],["afraid","takut"],["surprised","terkejut"],["confused","bingung"],["excited","bersemangat"],["bored","bosan"],["tired","lelah"],["relaxed","santai"],["curious","penasaran"],["proud","bangga"],["jealous","cemburu"],["kind","baik hati"],["friendly","ramah"],["lazy","malas"],["honest","jujur"],["generous","dermawan"],["selfish","egois"],["brave","berani"]
+
+,
+["doctor","dokter"],["nurse","perawat"],["teacher","guru"],["student","murid"],["engineer","insinyur"],["pilot","pilot"],["driver","supir"],["chef","koki"],["waiter","pelayan"],["farmer","petani"],["soldier","tentara"],["police","polisi"],["firefighter","pemadam kebakaran"],["artist","seniman"],["musician","musisi"],["actor","aktor"],["writer","penulis"],["scientist","ilmuwan"],["programmer","programmer"],["lawyer","pengacara"],
+["car","mobil"],["bus","bus"],["train","kereta"],["plane","pesawat"],["bicycle","sepeda"],["motorcycle","motor"],["ship","kapal"],["subway","kereta bawah tanah"],["tram","trem"],["scooter","skuter"],["taxi","taksi"],["truck","truk"],["van","van"],["helicopter","helikopter"],["rocket","roket"],["ferry","kapal feri"],["canoe","kanu"],["kayak","kayak"],["skateboard","skateboard"],["roller skates","sepatu roda"],
+["library","perpustakaan"],["laboratory","laboratorium"],["classroom","ruang kelas"],["school","sekolah"],["college","kampus"],["university","universitas"],["exam","ujian"],["assignment","tugas"],["project","proyek"],["lecture","kuliah"],["note","catatan"],["book","buku"],["pen","pena"],["pencil","pensil"],["eraser","penghapus"],["blackboard","papan tulis"],["marker","spidol"],["desk","meja"],["chair","kursi"],["bag","tas"],
+["house","rumah"],["apartment","apartemen"],["bed","tempat tidur"],["chair","kursi"],["table","meja"],["door","pintu"],["window","jendela"],["floor","lantai"],["roof","atap"],["wall","dinding"],["kitchen","dapur"],["bathroom","kamar mandi"],["bedroom","kamar tidur"],["living room","ruang tamu"],["garage","garasi"],["garden","taman"],["lamp","lampu"],["fan","kipas"],["mirror","cermin"],["clock","jam"],["shelf","rak"],
+["reading","membaca"],["writing","menulis"],["painting","melukis"],["drawing","menggambar"],["singing","bernyanyi"],["dancing","menari"],["playing guitar","main gitar"],["playing piano","main piano"],["playing violin","main biola"],["playing drum","main drum"],["playing music","main musik"],["gardening","berkebun"],["fishing","memancing"],["hiking","mendaki"],["camping","berkemah"],["cycling","bersepeda"],["swimming","berenang"],["yoga","yoga"],["meditation","meditasi"],["shopping","berbelanja"]
+,
+["sun","matahari"],["moon","bulan"],["star","bintang"],["sky","langit"],["cloud","awan"],["rain","hujan"],["storm","badai"],["thunder","guntur"],["lightning","petir"],["wind","angin"],["snow","salju"],["ice","es"],["fire","api"],["earth","bumi"],["soil","tanah"],["rock","batu"],["sand","pasir"],["mountain","gunung"],["hill","bukit"],["valley","lembah"],["river","sungai"],
+["computer","komputer"],["laptop","laptop"],["smartphone","ponsel pintar"],["tablet","tablet"],["internet","internet"],["wifi","wifi"],["AI","kecerdasan buatan"],["VR","realitas virtual"],["AR","realitas tertambah"],["robot","robot"],["drone","drone"],["programming","pemrograman"],["database","basis data"],["server","server"],["software","perangkat lunak"],["hardware","perangkat keras"],["cloud","awan"],["cybersecurity","keamanan siber"],["blockchain","blockchain"],["cryptocurrency","mata uang kripto"],
+["football","sepak bola"],["basketball","bola basket"],["volleyball","bola voli"],["badminton","bulu tangkis"],["tennis","tenis"],["table tennis","tenis meja"],["swimming","berenang"],["running","lari"],["cycling","bersepeda"],["boxing","tinju"],["karate","karate"],["judo","judo"],["taekwondo","taekwondo"],["yoga","yoga"],["gymnastics","senam"],["golf","golf"],["rugby","rugbi"],["baseball","bisbol"],["cricket","kriket"],["hockey","hoki"],["surfing","selancar"],
+["car","mobil"],["bus","bus"],["train","kereta"],["plane","pesawat"],["bicycle","sepeda"],["motorcycle","motor"],["ship","kapal"],["subway","kereta bawah tanah"],["tram","trem"],["scooter","skuter"],["taxi","taksi"],["truck","truk"],["van","van"],["helicopter","helikopter"],["rocket","roket"],["ferry","kapal feri"],["canoe","kanu"],["kayak","kayak"],["skateboard","skateboard"],["roller skates","sepatu roda"],["hovercraft","hovercraft"],
+["reading","membaca"],["writing","menulis"],["drawing","menggambar"],["painting","melukis"],["singing","bernyanyi"],["dancing","menari"],["playing music","main musik"],["gardening","berkebun"],["fishing","memancing"],["hiking","mendaki"],["camping","berkemah"],["cycling","bersepeda"],["swimming","berenang"],["yoga","yoga"],["meditation","meditasi"],["shopping","berbelanja"],["traveling","bepergian"],["playing","bermain"],["watching movies","menonton film"],["listening music","mendengarkan musik"]
+,
+["happy","bahagia"],["sad","sedih"],["angry","marah"],["afraid","takut"],["surprised","terkejut"],["confused","bingung"],["excited","bersemangat"],["bored","bosan"],["tired","lelah"],["relaxed","santai"],["curious","penasaran"],["proud","bangga"],["jealous","cemburu"],["kind","baik hati"],["friendly","ramah"],["lazy","malas"],["honest","jujur"],["generous","dermawan"],["selfish","egois"],["brave","berani"],
+["head","kepala"],["eye","mata"],["ear","telinga"],["nose","hidung"],["mouth","mulut"],["neck","leher"],["shoulder","bahu"],["arm","lengan"],["hand","tangan"],["finger","jari"],["chest","dada"],["stomach","perut"],["back","punggung"],["leg","kaki"],["foot","kaki"],["toe","jari kaki"],["brain","otak"],["heart","jantung"],["lung","paru-paru"],["kidney","ginjal"],
+["school","sekolah"],["classroom","ruang kelas"],["teacher","guru"],["student","murid"],["library","perpustakaan"],["laboratory","laboratorium"],["exam","ujian"],["assignment","tugas"],["project","proyek"],["lecture","kuliah"],["note","catatan"],["book","buku"],["pen","pena"],["pencil","pensil"],["eraser","penghapus"],["desk","meja"],["chair","kursi"],["bag","tas"],["blackboard","papan tulis"],["marker","spidol"],
+["house","rumah"],["apartment","apartemen"],["bed","tempat tidur"],["chair","kursi"],["table","meja"],["door","pintu"],["window","jendela"],["floor","lantai"],["roof","atap"],["wall","dinding"],["kitchen","dapur"],["bathroom","kamar mandi"],["bedroom","kamar tidur"],["living room","ruang tamu"],["garage","garasi"],["garden","taman"],["lamp","lampu"],["fan","kipas"],["mirror","cermin"],["clock","jam"],
+["bread","roti"],["rice","nasi"],["noodle","mi"],["pasta","pasta"],["cake","kue"],["cookie","kue kering"],["cheese","keju"],["milk","susu"],["egg","telur"],["chicken","ayam"],["beef","daging sapi"],["pork","daging babi"],["fish","ikan"],["shrimp","udang"],["crab","kepiting"],["vegetable","sayur"],["fruit","buah"],["apple","apel"],["banana","pisang"]
+
+["car","mobil"],["bus","bus"],["train","kereta"],["plane","pesawat"],["bicycle","sepeda"],["motorcycle","motor"],["ship","kapal"],["subway","kereta bawah tanah"],["tram","trem"],["scooter","skuter"],["taxi","taksi"],["truck","truk"],["van","van"],["helicopter","helikopter"],["rocket","roket"],["ferry","kapal feri"],["canoe","kanu"],["kayak","kayak"],["skateboard","skateboard"],["roller skates","sepatu roda"],
+["computer","komputer"],["laptop","laptop"],["smartphone","ponsel pintar"],["tablet","tablet"],["internet","internet"],["wifi","wifi"],["AI","kecerdasan buatan"],["VR","realitas virtual"],["AR","realitas tertambah"],["robot","robot"],["drone","drone"],["programming","pemrograman"],["database","basis data"],["server","server"],["software","perangkat lunak"],["hardware","perangkat keras"],["cloud","awan"],["cybersecurity","keamanan siber"],["blockchain","blockchain"],["cryptocurrency","mata uang kripto"],
+["reading","membaca"],["writing","menulis"],["drawing","menggambar"],["painting","melukis"],["singing","bernyanyi"],["dancing","menari"],["playing music","main musik"],["gardening","berkebun"],["fishing","memancing"],["hiking","mendaki"],["camping","berkemah"],["cycling","bersepeda"],["swimming","berenang"],["yoga","yoga"],["meditation","meditasi"],["shopping","berbelanja"],["traveling","bepergian"],["playing","bermain"],["watching movies","menonton film"],["listening music","mendengarkan musik"],
+["sun","matahari"],["moon","bulan"],["star","bintang"],["sky","langit"],["cloud","awan"],["rain","hujan"],["storm","badai"],["thunder","guntur"],["lightning","petir"],["wind","angin"],["snow","salju"],["ice","es"],["fire","api"],["earth","bumi"],["soil","tanah"],["rock","batu"],["sand","pasir"],["mountain","gunung"],["hill","bukit"],["valley","lembah"],
+["city","kota"],["village","desa"],["country","negara"],["continent","benua"],["planet","planet"],["river","sungai"],["lake","danau"],["island","pulau"],["forest","hutan"],["desert","gurun"],["beach","pantai"],["mountain","gunung"],["tree","pohon"],["flower","bunga"],["fruit","buah"],["vegetable","sayur"],["house","rumah"],["apartment","apartemen"],["school","sekolah"],["office","kantor"],["market","pasar"],["shop","toko"]
+];
+
+  // ===== fungsi kamus =====
+  let kamusPairs = JSON.parse(localStorage.getItem("kamusPairs")||"null") || basePairs;
+  const saveDict = ()=>localStorage.setItem("kamusPairs",JSON.stringify(kamusPairs));
+  const buildMaps=()=>{
+    const en2id=new Map(),id2en=new Map();
+    kamusPairs.forEach(([en,id])=>{
+      en2id.set(en.toLowerCase(),id.toLowerCase());
+      id2en.set(id.toLowerCase(),en.toLowerCase());
+    });
+    return {en2id,id2en};
+  };
+  let maps=buildMaps();
+
+  // ===== terjemahan frasa/word =====
+  const translate = (txt, mode) => {
+    if (mode === "none") return "";
+    const words = txt.toLowerCase().split(/\s+/);
+    let result = [];
+    let i = 0;
+
+    while (i < words.length) {
+      let match = null;
+      let len = 0;
+
+      // cek frasa maksimal 3 kata
+      for (let n = 3; n >= 1; n--) {
+        const slice = words.slice(i, i+n).join(" ");
+        if (mode === "en2id" && maps.en2id.has(slice)) {
+          match = maps.en2id.get(slice);
+          len = n; break;
+        }
+        if (mode === "id2en" && maps.id2en.has(slice)) {
+          match = maps.id2en.get(slice);
+          len = n; break;
+        }
+        if (mode === "auto") {
+          if (maps.en2id.has(slice)) { match = maps.en2id.get(slice); len = n; break; }
+          if (maps.id2en.has(slice)) { match = maps.id2en.get(slice); len = n; break; }
+        }
+      }
+
+      if (match) {
+        result.push(match);
+        i += len;
+      } else {
+        result.push(words[i]);
+        i++;
+      }
+    }
+
+    return result.join(" ");
+  };
+
+  // ===== storage pesan =====
+  let messages=JSON.parse(localStorage.getItem("messages")||"[]");
+  const saveMsgs=()=>localStorage.setItem("messages",JSON.stringify(messages));
+
+  const render=()=>{
+    const box=document.getElementById("messages");
+    box.innerHTML="";
+    messages.forEach((m,i)=>{
+      const div=document.createElement("div");
+      div.className=`msg ${m.user}`;
+      div.innerHTML=`
+        <div class="meta">${m.user}<button class="del" data-i="${i}">❌</button></div>
+        <div>${m.text}</div>
+        ${m.trans?`<div class="orig">${m.trans}</div>`:""}
+      `;
+      box.appendChild(div);
+    });
+    // hapus pesan
+    box.querySelectorAll(".del").forEach(btn=>{
+      btn.onclick=()=>{
+        messages.splice(btn.dataset.i,1);
+        saveMsgs();render();
+      };
+    });
+    // scroll otomatis
+    box.scrollTop = box.scrollHeight;
+  };
+
+  const send=()=>{
+    const inp=document.getElementById("msgInput");
+    const text=inp.value.trim();
+    if(!text) return;
+    const user=document.getElementById("userSelect").value;
+    const mode=document.getElementById("translateMode").value;
+    const trans=translate(text,mode);
+    messages.push({user,text,trans});
+    saveMsgs(); render();
+    inp.value="";
+  };
+
+  document.getElementById("sendBtn").onclick=send;
+  document.getElementById("msgInput").addEventListener("keydown",e=>{if(e.key==="Enter")send();});
+  document.getElementById("clearBtn").onclick=()=>{messages=[];saveMsgs();render();};
+  document.getElementById("exportBtn").onclick=()=>{
+    const blob=new Blob([JSON.stringify(messages)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="chat.json";a.click();
+  };
+  document.getElementById("importFile").onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=ev=>{messages=JSON.parse(ev.target.result);saveMsgs();render();};
+    r.readAsText(f);
+  };
+  document.getElementById("addPairBtn").onclick=()=>{
+    const en=document.getElementById("newEn").value.trim().toLowerCase();
+    const id=document.getElementById("newId").value.trim().toLowerCase();
+    if(en&&id){kamusPairs.push([en,id]);saveDict();maps=buildMaps();updateDictView();}
+  };
+  const updateDictView=()=>{document.getElementById("dictView").value=JSON.stringify(kamusPairs,null,2);};
+  updateDictView();
+  render();
+
+  // dark mode toggle
+  document.getElementById("darkBtn").onclick=()=>{
+    document.body.classList.toggle("dark");
+  };
+</script>
 </body>
 </html>
